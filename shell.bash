@@ -1,6 +1,5 @@
 # Bash entry points reuse the plugin's zsh implementation.
 _HERDR_LAYOUTS_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-export PATH="$_HERDR_LAYOUTS_ROOT/bin:$PATH"
 
 herdr-layout-save() {
   HERDR_AGENT_ARGS="${HERDR_AGENT_ARGS:-}" zsh -fc 'source "$1/shell.zsh"; shift; herdr-layout-save "$@"' herdr-layout-save "$_HERDR_LAYOUTS_ROOT" "$@"

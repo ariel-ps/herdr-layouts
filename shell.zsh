@@ -1,8 +1,4 @@
 # Source this file from zsh to load this plugin's commands.
-typeset -g _HERDR_LAYOUTS_ROOT="${0:A:h}"
-typeset -U path
-path=("$_HERDR_LAYOUTS_ROOT/bin" $path)
-
 __herdr_layouts_ready() {
   command -v herdr >/dev/null 2>&1 || { echo "herdr: not installed" >&2; return 1; }
   command -v jq >/dev/null 2>&1 || { echo "herdr: jq not found" >&2; return 1; }
@@ -13,9 +9,16 @@ __herdr_layouts_ready() {
 
 __herdr_layout_dir() { print -r -- "${XDG_CONFIG_HOME:-$HOME/.config}/herdr/layouts"; }
 
-# Claude encodes a project directory by replacing every / and . with -.
-__herdr_project_dir() {
-  print -r -- "$HOME/.claude/projects/${${1:A}//[\/.]/-}"
+# Keep every layout operation inside the layout directory, including symlinks.
+__herdr_layout_name() {
+  local name=$1 dir="$(__herdr_layout_dir)" file
+  [[ -n "$name" && "$name" != [-.]* && -z "${name//[a-zA-Z0-9_-]/}" ]] || {
+    echo 'herdr: layout names must start with a letter, digit, or underscore and contain only letters, digits, underscores, or hyphens' >&2
+    return 2
+  }
+  for file in "$dir/$name.json" "$dir/$name.agents.json"; do
+    [[ ! -L "$file" ]] || { echo "herdr: refusing symlink $file" >&2; return 2; }
+  done
 }
 
 # One request, one response. The daemon speaks JSON lines over its unix socket,
@@ -34,7 +37,8 @@ herdr-layout-save() {
   __herdr_layouts_ready || return 1
   local name=$1 tab=$2 params='{}' out dir
   [ -n "$name" ] || { echo "usage: herdr-layout-save <name> [tab-id]" >&2; return 2; }
-  [ -n "$tab" ] && params="{\"tab_id\":\"$tab\"}"
+  __herdr_layout_name "$name" || return $?
+  [ -n "$tab" ] && params=$(jq -nc --arg tab "$tab" '{tab_id:$tab}')
 
   out=$(__herdr_rpc "{\"id\":\"save\",\"method\":\"layout.export\",\"params\":$params}") || return 1
   print -r -- "$out" | jq -e '.result.layout' >/dev/null 2>&1 || {
@@ -48,36 +52,29 @@ herdr-layout-save() {
   __herdr_layout_snap_agents "$name" "$(print -r -- "$out" | jq -r '.result.layout.tab_id')"
 }
 
-# The conversation half of a layout: one entry per pane that is running an agent,
-# holding the session id it is in and the opening line of that session.
-#
-# The id comes out of the pane's own process arguments. herdr has a session ref
-# of its own, but it is only populated when herdr recognised the launch — the
-# argv shape it looks for does not match every start, and `agent list` omits the
-# field entirely when it is empty. Process arguments are there either way. A pane
-# started without --resume has no id in them, so the newest session in its
-# directory is the best available guess; two fresh agents in one directory are
-# the case that guess gets wrong.
+# Save only session IDs reported for the pane. Never infer a conversation from
+# its working directory or opening prompt: multiple agents can share both.
 __herdr_layout_snap_agents() {
-  local name=$1 tab=$2 pane label cwd pid sid prompt kind
+  local name=$1 tab=$2 pane label kind sid
   local sidecar="$(__herdr_layout_dir)/$name.agents.json" entries='{}'
 
-  while IFS=$'\t' read -r pane label cwd kind; do
-    [ -n "$label" ] && [ "$kind" != null ] || continue
-    sid=$(herdr pane process-info --pane "$pane" \
-      | jq -r --arg k "$kind" 'first(.result.process_info.foreground_processes[]
-           | select(.argv0 == $k) | .argv | index("--resume") as $i
-           | if $i then .[$i + 1] else empty end) // empty')
-    [ -n "$sid" ] || sid=$(uv run --no-project python "$_HERDR_LAYOUTS_ROOT/bin/herdr-session-pick" newest "$cwd")
-    [ -n "$sid" ] || continue
-    prompt=$(uv run --no-project python "$_HERDR_LAYOUTS_ROOT/bin/herdr-session-pick" prompt "$cwd" "$sid")
-    entries=$(print -r -- "$entries" | jq --arg l "$label" --arg s "$sid" --arg p "$prompt" \
-      --arg k "$kind" '.[$l] = {kind: $k, session: $s, match: $p}')
+  while IFS=$'\t' read -r pane label kind; do
+    sid=$(herdr pane get "$pane" | jq -r --arg k "$kind" \
+      '.result.pane | select(.agent == $k) | .agent_session.value // empty')
+    if [[ -z "$sid" || -n "${sid//[a-zA-Z0-9_-]/}" || "$sid" == -* ]]; then
+      echo "$pane: no verified session; will start fresh" >&2
+      continue
+    fi
+    entries=$(print -r -- "$entries" | jq --arg l "$label" --arg s "$sid" \
+      --arg k "$kind" '.[$l] = {kind: $k, session: $s, verified: true}')
   done < <(herdr pane list | jq -r --arg tab "$tab" \
-    '.result.panes[] | select(.tab_id == $tab)
-     | [.pane_id, (.label // empty), .cwd, (.agent // null)] | @tsv')
+    '.result.panes[] | select(.tab_id == $tab and (.label // "") != "" and (.agent // "") != "")
+     | [.pane_id, .label, .agent] | @tsv')
 
-  [ "$entries" = '{}' ] && return 0
+  # Exclude every duplicate, rather than arbitrarily assigning it to one pane.
+  entries=$(print -r -- "$entries" | jq 'to_entries | group_by(.value.kind, .value.session)
+    | map(select(length == 1) | .[0]) | from_entries') || return 1
+  # Always replace the sidecar so an empty snapshot cannot retain old sessions.
   print -r -- "$entries" | jq . > "$sidecar" || return 1
   echo "  agents: $(print -r -- "$entries" | jq -r 'keys | join(", ")') -> ${sidecar:t}"
 }
@@ -89,6 +86,7 @@ herdr-layout-load() {
   __herdr_layouts_ready || return 1
   local name=$1 ws=$2 file root params out
   [ -n "$name" ] || { echo "usage: herdr-layout-load <name> [workspace-id]" >&2; return 2; }
+  __herdr_layout_name "$name" || return $?
   file="$(__herdr_layout_dir)/$name.json"
   [ -r "$file" ] || { echo "herdr: no saved layout $name" >&2; return 1; }
 
@@ -117,7 +115,7 @@ herdr-layout-list() {
     [ -n "$f" ] || continue
     found=1
     printf "%-22s %s panes\n" "${${f:t}:r}" "$(jq '[.root|..|objects|select(.type=="pane")]|length' "$f" 2>/dev/null)"
-  done < <(find "$dir" -maxdepth 1 -name '*.json' 2>/dev/null | sort)
+  done < <(find "$dir" -maxdepth 1 -type f -name '*.json' ! -name '*.agents.json' 2>/dev/null | sort)
   (( found )) || echo "no saved layouts"
 }
 
@@ -135,15 +133,14 @@ herdr-layout-list() {
 #   second tab and the placeholder is closed afterwards.
 #
 #   The sidecar `<name>.agents.json` that herdr-layout-save writes alongside the
-#   layout carries the conversations: per pane label, the session id it was in
-#   and that session's opening line. The id is tried first and the opening line
-#   is the fallback for when it no longer resolves. Panes with no entry, and
-#   panes whose conversation is gone, start fresh.
+#   layout carries verified session IDs by pane label. Panes without one start
+#   fresh. A failed resume is reported rather than replaced with a guessed session.
 herdr-layout-up() {
   __herdr_layouts_ready || return 1
   local name=$1 kind="${2:-claude}" ws='' placeholder='' created tab pane label cwd
-  local sidecar match sid pane_kind
+  local sidecar sid pane_kind failures=0
   [ -n "$name" ] || { echo "usage: herdr-layout-up <name> [kind]" >&2; return 2; }
+  __herdr_layout_name "$name" || return $?
   [ -r "$(__herdr_layout_dir)/$name.json" ] || { echo "herdr: no saved layout $name" >&2; return 1; }
   sidecar="$(__herdr_layout_dir)/$name.agents.json"
 
@@ -174,22 +171,23 @@ herdr-layout-up() {
   while IFS=$'\t' read -r pane label cwd; do
     [ -n "$pane" ] || continue
     args=()
+    sid=''
     pane_kind=$kind
     if [ -r "$sidecar" ]; then
       # A saved fleet can be mixed — the kind travels per pane, the argument is
       # only the default for panes the sidecar says nothing about.
       pane_kind=$(jq -r --arg l "$label" --arg k "$kind" '.[$l].kind // $k' "$sidecar")
-      # The pinned id first, the opening line as the fallback: an id can be
-      # deleted or archived, and then the prompt is what still finds the pane's
-      # conversation.
-      sid=$(jq -r --arg l "$label" '.[$l].session // empty' "$sidecar")
-      [ -n "$sid" ] && [ ! -f "$(__herdr_project_dir "$cwd")/$sid.jsonl" ] && sid=''
-      [ -n "$sid" ] || {
-        match=$(jq -r --arg l "$label" '.[$l].match // empty' "$sidecar")
-        [ -n "$match" ] && sid=$(uv run --no-project python "$_HERDR_LAYOUTS_ROOT/bin/herdr-session-pick" \
-          match "$cwd" "$match" 2>/dev/null)
-      }
-      [ -n "$sid" ] && args+=(--resume "$sid")
+      sid=$(jq -r --arg l "$label" '.[$l] | select(.verified == true) | .session // empty' "$sidecar")
+      if [[ -n "$sid" ]]; then
+        if [[ -n "${sid//[a-zA-Z0-9_-]/}" || "$sid" == -* ]]; then
+          echo "$pane: invalid saved session" >&2; (( failures++ )); continue
+        fi
+        case "$pane_kind" in
+          claude) args+=(--resume "$sid") ;;
+          codex) args+=(resume "$sid") ;;
+          *) echo "$pane: cannot resume $pane_kind" >&2; (( failures++ )); continue ;;
+        esac
+      fi
     fi
     [ -n "$HERDR_AGENT_ARGS" ] && args+=(${=HERDR_AGENT_ARGS})
 
@@ -203,12 +201,14 @@ herdr-layout-up() {
       echo "$pane  $label  $pane_kind${sid:+  resumed ${sid[1,8]}}"
     else
       echo "$pane  $label  $pane_kind  FAILED (pane left at its prompt)" >&2
+      (( failures++ ))
     fi
     sid=''
   done < <(herdr pane list | jq -r --arg tab "$tab" \
     '.result.panes[] | select(.tab_id == $tab)
      | [.pane_id, (.label // (.pane_id | sub("^.*:"; ""))), .cwd] | @tsv')
-  echo "workspace $ws, tab $tab" >&2
+  echo "workspace $ws, tab $tab: $failures failed launches" >&2
+  (( failures == 0 ))
 }
 
 # usage: herdr-grid-agents [count] [kind] [label]
@@ -241,7 +241,7 @@ herdr-grid-agents() {
   label=$(print -r -- "${label:l}" | tr -c 'a-z0-9_-' '-' | sed 's/^[^a-z]*//; s/-*$//')
   [ -n "$label" ] || { echo "herdr-grid-agents: could not derive a usable label; pass one" >&2; return 1; }
 
-  local created tab root pane prev dir i name
+  local created tab root pane prev dir i name failures=0
   created=$(herdr tab create --label "$label" --cwd "$PWD") || return 1
   tab=$(print -r -- "$created" | jq -r '.result.tab.tab_id')
   root=$(print -r -- "$created" | jq -r '.result.root_pane.pane_id')
@@ -252,7 +252,7 @@ herdr-grid-agents() {
     (( i % 2 == 0 )) && dir=right || dir=down
     pane=$(herdr pane split "$prev" --direction "$dir" --no-focus --cwd "$PWD" \
       | jq -r '.result.pane.pane_id') || return 1
-    [ -n "$pane" ] && [ "$pane" != null ] || break
+    [ -n "$pane" ] && [ "$pane" != null ] || { (( failures++ )); break; }
     panes+=("$pane")
     prev=$pane
   done
@@ -267,8 +267,10 @@ herdr-grid-agents() {
       echo "$pane  $name  $kind"
     else
       echo "$pane  $name  $kind  FAILED (pane left at its prompt)" >&2
+      (( failures++ ))
     fi
     (( i++ ))
   done
-  echo "tab $tab: ${#panes} panes in $PWD" >&2
+  echo "tab $tab: ${#panes} panes in $PWD, $failures failures" >&2
+  (( failures == 0 ))
 }
