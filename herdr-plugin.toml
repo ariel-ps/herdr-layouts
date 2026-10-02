@@ -1,0 +1,11 @@
+id = "dev.ariel.herdr-layouts"
+name = "Layouts"
+version = "0.1.0"
+min_herdr_version = "0.9.3"
+description = "Save and restore layouts and create agent grids."
+platforms = ["macos", "linux"]
+
+[[actions]]
+id = "list"
+title = "List saved layouts"
+command = ["zsh","-c","source ./shell.zsh && herdr-layout-list"]
