@@ -5,6 +5,14 @@ min_herdr_version = "0.9.3"
 description = "Save and restore layouts and create agent grids."
 platforms = ["macos", "linux"]
 
+[[events]]
+on = "tab.created"
+command = ["python3", "./hooks/open-code-tab.py"]
+
+[[events]]
+on = "tab.renamed"
+command = ["python3", "./hooks/open-code-tab.py"]
+
 [[actions]]
 id = "list"
 title = "List saved layouts"
