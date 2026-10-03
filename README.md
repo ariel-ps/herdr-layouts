@@ -8,7 +8,7 @@ Commands: `herdr-layout-save`, `herdr-layout-load`, `herdr-layout-up`, `herdr-la
 
 [Herdr Setup](https://github.com/ariel-ps/herdr-setup) installs prerequisites and lets you select this plugin in `dependencies.json`.
 
-For standalone installation, you need Herdr 0.9.3+, zsh, jq, and Unix-socket-capable netcat (`nc`):
+For standalone installation, you need Herdr 0.9.3+, Rust 1.89+ with Cargo (for installation), zsh, jq, and Unix-socket-capable netcat (`nc`):
 
 ```sh
 herdr plugin install ariel-ps/herdr-layouts --ref main --yes
@@ -24,7 +24,7 @@ Create a tab named `code` (case-insensitive), or rename a new shell tab to `Code
 
 Create or rename an idle tab to `board` (case-insensitive) to open Herdr Board in that tab. The `herdr-board` plugin must be installed and enabled; the hook finds its executable automatically.
 
-Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. Requires Python 3. No Herdr restart is needed after enabling the plugin.
+Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. The launcher is a compiled Rust binary; Python is not needed at runtime. No Herdr restart is needed after enabling the plugin.
 
 ## Saving and restoring
 
@@ -37,6 +37,10 @@ herdr-layout-up work
 Names accept letters, digits, underscores, and hyphens, and cannot start with a hyphen. `herdr-layout-up` resumes Claude and Codex sessions only when Herdr reported a unique session ID when saving. Unidentified panes start fresh; launch failures return a nonzero exit status.
 
 Re-save layouts created by older versions to capture verified sessions. Older conversation snapshots are no longer trusted because they could associate multiple panes with the same conversation. Layout geometry still loads normally.
+
+## Development
+
+Build the tab launcher with `sh scripts/build/install.sh` and check it with `python3 tests/test_named_tabs.py`.
 
 ## License
 

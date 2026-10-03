@@ -5,13 +5,16 @@ min_herdr_version = "0.9.3"
 description = "Save and restore layouts and create agent grids."
 platforms = ["macos", "linux"]
 
+[[build]]
+command = ["sh", "./scripts/build/install.sh"]
+
 [[events]]
 on = "tab.created"
-command = ["python3", "./hooks/open-named-tab.py"]
+command = ["./libexec/herdr-named-tab"]
 
 [[events]]
 on = "tab.renamed"
-command = ["python3", "./hooks/open-named-tab.py"]
+command = ["./libexec/herdr-named-tab"]
 
 [[actions]]
 id = "list"

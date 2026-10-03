@@ -1,0 +1,10 @@
+[package]
+name = "herdr-named-tab"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license = "MIT"
+description = "Open Neovim or Herdr Board in named Herdr tabs"
+
+[dependencies]
+serde_json = "1.0"
