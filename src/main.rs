@@ -190,10 +190,12 @@ fn run_named_tab(event: &Value) -> Result<()> {
         return Ok(());
     }
     let command = if name == "code" {
-        let path = env::split_paths(&env::var_os("PATH").unwrap_or_default())
+        let Some(path) = env::split_paths(&env::var_os("PATH").unwrap_or_default())
             .map(|dir| dir.join("nvim"))
             .find(|path| executable(path))
-            .ok_or("Install Neovim to automatically open code tabs")?;
+        else {
+            return Ok(());
+        };
         format!("{} .", shell_quote(&fs::canonicalize(path)?)?)
     } else {
         let response = herdr(&["plugin", "list", "--json"])?;

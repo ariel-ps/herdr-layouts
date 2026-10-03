@@ -110,7 +110,7 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
                 if case == 'missing-binary':
                     board.unlink()
                 failures = ('failed-run', 'missing-plugin', 'disabled-plugin', 'missing-binary',
-                            'missing-nvim', 'invalid-id', 'malformed-event', 'api-error', 'bad-response')
+                            'invalid-id', 'malformed-event', 'api-error', 'bad-response')
                 if case == 'concurrent':
                     processes = [subprocess.Popen([str(binary)], env=env, cwd=root,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(2)]

@@ -24,7 +24,7 @@ Every new workspace keeps its default first tab (typically labelled `1`) and add
 
 You can still create or rename any other idle, single-pane tab to `code` or `board` (case-insensitive) to trigger the same launchers manually.
 
-Neovim must be installed and available on PATH for `code` tabs. The `herdr-board` plugin must be installed and enabled for `board` tabs; the hook finds its executable automatically.
+If Neovim is not on PATH, `code` tabs stay a normal shell; install `nvim` to auto-launch the editor. The `herdr-board` plugin must be installed and enabled for `board` tabs; the hook finds its executable automatically.
 
 Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. The launcher is a compiled Rust binary; Python is not needed at runtime. No Herdr restart is needed after enabling the plugin.
 
