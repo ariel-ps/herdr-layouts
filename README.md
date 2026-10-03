@@ -18,11 +18,13 @@ Use a commit or release tag instead of `main` to pin a version. Supports macOS, 
 
 Herdr Setup loads the enabled plugin's helpers in bash or zsh. For a manual installation, source the installed plugin's `shell.bash` in `.bashrc` or `shell.zsh` in `.zshrc`. Bash helpers call the same zsh implementation, so zsh must also be installed; you keep bash as your shell.
 
-## Code tabs
+## Code and Board tabs
 
 Create a tab named `code` (case-insensitive), or rename a new shell tab to `Code`, to open `nvim .` in that tab's directory. Neovim must be installed and available on PATH; your existing Neovim configuration is used.
 
-The hook runs once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. Requires Python 3. No Herdr restart is needed after enabling the plugin.
+Create or rename an idle tab to `board` (case-insensitive) to open Herdr Board in that tab. The `herdr-board` plugin must be installed and enabled; the hook finds its executable automatically.
+
+Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. Requires Python 3. No Herdr restart is needed after enabling the plugin.
 
 ## Saving and restoring
 

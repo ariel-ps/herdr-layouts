@@ -7,11 +7,11 @@ platforms = ["macos", "linux"]
 
 [[events]]
 on = "tab.created"
-command = ["python3", "./hooks/open-code-tab.py"]
+command = ["python3", "./hooks/open-named-tab.py"]
 
 [[events]]
 on = "tab.renamed"
-command = ["python3", "./hooks/open-code-tab.py"]
+command = ["python3", "./hooks/open-named-tab.py"]
 
 [[actions]]
 id = "list"
