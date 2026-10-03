@@ -21,6 +21,18 @@ __herdr_layout_name() {
   done
 }
 
+# Session snapshots and agent names use labels, so ambiguous layouts cannot resume.
+__herdr_layout_unique_labels() {
+  local duplicates
+  duplicates=$(jq -r '[.root | .. | objects | select(.type == "pane")
+    | .label // empty | select(. != "")] | group_by(.)
+    | .[] | select(length > 1) | .[0]') || return 1
+  if [[ -n "$duplicates" ]]; then
+    echo "herdr: duplicate pane labels; give each pane a unique label before saving or resuming: $duplicates" >&2
+    return 1
+  fi
+}
+
 # One request, one response. The daemon speaks JSON lines over its unix socket,
 # so nc is a complete client here — no token and no websocket, unlike Xirp.
 __herdr_rpc() {
@@ -46,6 +58,8 @@ herdr-layout-save() {
     return 1
   }
 
+  print -r -- "$out" | jq '.result.layout' | __herdr_layout_unique_labels || return 1
+
   dir=$(__herdr_layout_dir); mkdir -p "$dir"
   print -r -- "$out" | jq '.result.layout' > "$dir/$name.json" || return 1
   echo "saved $name ($(print -r -- "$out" | jq '[.result.layout.root|..|objects|select(.type=="pane")]|length') panes) -> $dir/$name.json"
@@ -56,7 +70,7 @@ herdr-layout-save() {
 # its working directory or opening prompt: multiple agents can share both.
 __herdr_layout_snap_agents() {
   local name=$1 tab=$2 pane label kind sid
-  local sidecar="$(__herdr_layout_dir)/$name.agents.json" entries='{}'
+  local sidecar="$(__herdr_layout_dir)/$name.agents.json" entries='[]'
 
   while IFS=$'\t' read -r pane label kind; do
     sid=$(herdr pane get "$pane" | jq -r --arg k "$kind" \
@@ -66,13 +80,14 @@ __herdr_layout_snap_agents() {
       continue
     fi
     entries=$(print -r -- "$entries" | jq --arg l "$label" --arg s "$sid" \
-      --arg k "$kind" '.[$l] = {kind: $k, session: $s, verified: true}')
+      --arg k "$kind" '. + [{key: $l, value: {kind: $k, session: $s, verified: true}}]') || return 1
   done < <(herdr pane list | jq -r --arg tab "$tab" \
     '.result.panes[] | select(.tab_id == $tab and (.label // "") != "" and (.agent // "") != "")
      | [.pane_id, .label, .agent] | @tsv')
 
   # Exclude every duplicate, rather than arbitrarily assigning it to one pane.
-  entries=$(print -r -- "$entries" | jq 'to_entries | group_by(.value.kind, .value.session)
+  entries=$(print -r -- "$entries" | jq 'group_by(.key) | map(select(length == 1) | .[0])
+    | group_by(.value.kind, .value.session)
     | map(select(length == 1) | .[0]) | from_entries') || return 1
   # Always replace the sidecar so an empty snapshot cannot retain old sessions.
   print -r -- "$entries" | jq . > "$sidecar" || return 1
@@ -142,6 +157,7 @@ herdr-layout-up() {
   [ -n "$name" ] || { echo "usage: herdr-layout-up <name> [kind]" >&2; return 2; }
   __herdr_layout_name "$name" || return $?
   [ -r "$(__herdr_layout_dir)/$name.json" ] || { echo "herdr: no saved layout $name" >&2; return 1; }
+  __herdr_layout_unique_labels < "$(__herdr_layout_dir)/$name.json" || return 1
   sidecar="$(__herdr_layout_dir)/$name.agents.json"
 
   # An agent name is unique among live agents, so a second run would half-fail

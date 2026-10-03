@@ -108,6 +108,29 @@ __herdr_rpc() { cat "$TEST_RPC"; }
     assert invoke('herdr-layout-save', 'fleet').returncode == 0
     assert json.loads(sidecar.read_text()) == {}, 'Duplicate sessions must not be assigned arbitrarily'
 
+    # Labels are the sidecar keys: reject collisions before saving or launching,
+    # including old layouts whose sidecars already lost one of the sessions.
+    for pane in panes:
+        pane['label'] = 'same'
+    panes[1]['agent_session'] = {'value': 'different-session'}
+    state.write_text(json.dumps({'panes': panes}))
+    layout['root'] = {'type': 'split', 'children': [
+        {'type': 'pane', 'label': 'same'}, {'type': 'pane', 'label': 'same'}]}
+    rpc.write_text(json.dumps({'result': {'layout': layout}}))
+    previous = (directory / 'fleet.json').read_bytes(), sidecar.read_bytes()
+    result = invoke('herdr-layout-save', 'fleet')
+    assert result.returncode == 1 and 'duplicate pane labels' in result.stderr, result
+    assert previous == ((directory / 'fleet.json').read_bytes(), sidecar.read_bytes())
+    # Even a label change between export and snapshot must not overwrite a session.
+    assert invoke('__herdr_layout_snap_agents', 'fleet', 'w1:t1').returncode == 0
+    assert json.loads(sidecar.read_text()) == {}
+    (directory / 'fleet.json').write_text(json.dumps(layout))
+    sidecar.write_text(json.dumps({'same': {'kind': 'claude', 'session': 'different-session', 'verified': True}}))
+    calls.write_text('')
+    result = invoke('herdr-layout-up', 'fleet')
+    assert result.returncode == 1 and 'duplicate pane labels' in result.stderr, result
+    assert not calls.read_text(), 'Ambiguous layouts must fail before touching Herdr'
+
 
 def check():
     # A relocated standalone plugin must work without the old toolkit or siblings.

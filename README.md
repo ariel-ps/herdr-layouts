@@ -36,7 +36,7 @@ herdr-layout-list
 herdr-layout-up work
 ```
 
-Names accept letters, digits, underscores, and hyphens, and cannot start with a hyphen. `herdr-layout-up` resumes Claude and Codex sessions only when Herdr reported a unique session ID when saving. Unidentified panes start fresh; launch failures return a nonzero exit status.
+Names accept letters, digits, underscores, and hyphens, and cannot start with a hyphen. `herdr-layout-up` resumes Claude and Codex sessions only when Herdr reported a unique session ID when saving. Unidentified panes start fresh; launch failures return a nonzero exit status. Pane labels must be unique when saving or resuming; ambiguous layouts are rejected before any agents start.
 
 Re-save layouts created by older versions to capture verified sessions. Older conversation snapshots are no longer trusted because they could associate multiple panes with the same conversation. Layout geometry still loads normally.
 
