@@ -1,0 +1,27 @@
+tests/test_named_tabs.py
+  37cdea2bc419c064 162
+README.md
+  37cdea2bc419c064 23
+src/main.rs
+  37cdea2bc419c064 101,108,111
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "2.0.0",
+  "base_commit_sha": "62e27409b00aab0ea60f01f44064ba56eb63e5c5",
+  "prompts": {
+    "37cdea2bc419c064": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "63760873-492d-4aea-9e9f-c9a70eaefd5c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "ariel-ps <ariel@prompt.security>",
+      "messages": [],
+      "total_additions": 13,
+      "total_deletions": 13,
+      "accepted_lines": 5,
+      "overriden_lines": 0
+    }
+  }
+}
