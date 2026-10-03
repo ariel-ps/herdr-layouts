@@ -20,7 +20,7 @@ Herdr Setup loads the enabled plugin's helpers in bash or zsh. For a manual inst
 
 ## Code and Board tabs
 
-Every new workspace gets two tabs automatically: the first tab is renamed to `code` and a second tab labelled `board` is created without stealing focus. The same hooks then open Neovim and Herdr Board when each tab's shell is idle.
+Every new workspace keeps its default first tab (typically labelled `1`) and adds two more tabs labelled `code` and `board` without stealing focus. The same hooks then open Neovim and Herdr Board when each named tab's shell is idle.
 
 You can still create or rename any other idle, single-pane tab to `code` or `board` (case-insensitive) to trigger the same launchers manually.
 

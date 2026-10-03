@@ -159,7 +159,7 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
         assert result.returncode == 0, result.stderr
         ws = json.loads(ws_state.read_text())
         assert ws['calls'] == [
-            ['tab', 'rename', 'w1:t1', 'code'],
+            ['tab', 'create', '--workspace', 'w1', '--label', 'code', '--no-focus'],
             ['tab', 'create', '--workspace', 'w1', '--label', 'board', '--no-focus'],
             ['workspace', 'report-metadata', 'w1', '--source', 'herdr-layouts-default-tabs',
              '--token', 'herdr-layouts-default-tabs=done'],

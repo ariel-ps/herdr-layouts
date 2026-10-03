@@ -97,18 +97,18 @@ fn bootstrap_workspace_tabs(workspace: &Value) -> Result<()> {
         return Ok(());
     }
     let workspace_id = string(workspace, "workspace_id")?;
-    let active_tab = string(workspace, "active_tab_id")?;
     let _lock = named_tabs_lock(&plugin_state_dir()?)?;
-    herdr(&["tab", "rename", active_tab, "code"])?;
-    herdr(&[
-        "tab",
-        "create",
-        "--workspace",
-        workspace_id,
-        "--label",
-        "board",
-        "--no-focus",
-    ])?;
+    for label in ["code", "board"] {
+        herdr(&[
+            "tab",
+            "create",
+            "--workspace",
+            workspace_id,
+            "--label",
+            label,
+            "--no-focus",
+        ])?;
+    }
     herdr(&[
         "workspace",
         "report-metadata",
