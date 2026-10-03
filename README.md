@@ -26,6 +26,8 @@ Create or rename an idle tab to `board` (case-insensitive) to open Herdr Board i
 
 Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. The launcher is a compiled Rust binary; Python is not needed at runtime. No Herdr restart is needed after enabling the plugin.
 
+Open **Control panel** from Herdr’s plugin actions menu or a pane, tab, or workspace context menu to browse setup tools and help. This delegates to the installed **Herdr Plus** plugin.
+
 ## Saving and restoring
 
 ```sh

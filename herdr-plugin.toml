@@ -20,3 +20,10 @@ command = ["./libexec/herdr-named-tab"]
 id = "list"
 title = "List saved layouts"
 command = ["zsh","-c","source ./shell.zsh && herdr-layout-list"]
+
+[[actions]]
+id = "control-panel"
+title = "Control panel"
+description = "Browse tools, plugins, sound settings, and the quick guide."
+contexts = ["global", "workspace", "tab", "pane"]
+command = ["sh", "-c", "exec \"${HERDR_BIN_PATH:-herdr}\" plugin action invoke cloudmanic.herdr-plus.quick-actions"]
