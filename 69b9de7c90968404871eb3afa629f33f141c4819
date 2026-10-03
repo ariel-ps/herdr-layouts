@@ -1,0 +1,29 @@
+herdr-plugin.toml
+  37cdea2bc419c064 12-14,26
+src/main.rs
+  37cdea2bc419c064 15-17,61-66,70-74,79-80,89-124,139,159,229-242
+README.md
+  37cdea2bc419c064 19,23,25,27,47
+tests/test_named_tabs.py
+  37cdea2bc419c064 20,41,43-47,143-184
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "2.0.0",
+  "base_commit_sha": "69b9de7c90968404871eb3afa629f33f141c4819",
+  "prompts": {
+    "37cdea2bc419c064": {
+      "agent_id": {
+        "tool": "cursor",
+        "id": "63760873-492d-4aea-9e9f-c9a70eaefd5c",
+        "model": "gpt-5.6-sol"
+      },
+      "human_author": "ariel-ps <ariel@prompt.security>",
+      "messages": [],
+      "total_additions": 154,
+      "total_deletions": 37,
+      "accepted_lines": 134,
+      "overriden_lines": 0
+    }
+  }
+}
