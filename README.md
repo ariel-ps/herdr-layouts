@@ -16,13 +16,15 @@ herdr plugin install ariel-ps/herdr-layouts --ref main --yes
 
 Use a commit or release tag instead of `main` to pin a version. Supports macOS, Ubuntu/Debian, and Fedora.
 
-Herdr Setup loads the enabled plugin's helpers in bash or zsh. For a manual installation, source the installed plugin's `shell.bash` in `.bashrc` or `shell.zsh` in `.zshrc`. Bash helpers call the same zsh implementation, so zsh must also be installed; you keep bash as your shell.
+Herdr Setup loads the enabled plugin's helpers in bash or zsh. For a manual installation, source the installed plugin's `shell.bash` in `.bashrc` or `shell.zsh` in `.zshrc`. These root files are stable public loaders for the private `libexec/layouts.zsh` implementation. Bash helpers call that same zsh implementation, so zsh must also be installed; you keep bash as your shell.
 
 ## Code and Board tabs
 
-Create a tab named `code` (case-insensitive), or rename a new shell tab to `Code`, to open `nvim .` in that tab's directory. Neovim must be installed and available on PATH; your existing Neovim configuration is used.
+Every new workspace gets two tabs automatically: the first tab is renamed to `code` and a second tab labelled `board` is created without stealing focus. The same hooks then open Neovim and Herdr Board when each tab's shell is idle.
 
-Create or rename an idle tab to `board` (case-insensitive) to open Herdr Board in that tab. The `herdr-board` plugin must be installed and enabled; the hook finds its executable automatically.
+You can still create or rename any other idle, single-pane tab to `code` or `board` (case-insensitive) to trigger the same launchers manually.
+
+Neovim must be installed and available on PATH for `code` tabs. The `herdr-board` plugin must be installed and enabled for `board` tabs; the hook finds its executable automatically.
 
 Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. The launcher is a compiled Rust binary; Python is not needed at runtime. No Herdr restart is needed after enabling the plugin.
 
@@ -41,6 +43,8 @@ Names accept letters, digits, underscores, and hyphens, and cannot start with a 
 Re-save layouts created by older versions to capture verified sessions. Older conversation snapshots are no longer trusted because they could associate multiple panes with the same conversation. Layout geometry still loads normally.
 
 ## Development
+
+Run the contract and runtime tests with `python3 tests/test_plugin.py`. Check shell syntax with `zsh -n shell.zsh && zsh -n libexec/layouts.zsh && zsh -n actions/list-layouts.zsh && bash -n shell.bash`.
 
 Build the tab launcher with `sh scripts/build/install.sh` and check it with `python3 tests/test_named_tabs.py`.
 

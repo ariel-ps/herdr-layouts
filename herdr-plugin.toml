@@ -9,6 +9,10 @@ platforms = ["macos", "linux"]
 command = ["sh", "./scripts/build/install.sh"]
 
 [[events]]
+on = "workspace.created"
+command = ["./libexec/herdr-named-tab"]
+
+[[events]]
 on = "tab.created"
 command = ["./libexec/herdr-named-tab"]
 
@@ -19,7 +23,7 @@ command = ["./libexec/herdr-named-tab"]
 [[actions]]
 id = "list"
 title = "List saved layouts"
-command = ["zsh","-c","source ./shell.zsh && herdr-layout-list"]
+command = ["zsh", "./actions/list-layouts.zsh"]
 
 [[actions]]
 id = "control-panel"

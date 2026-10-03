@@ -12,6 +12,9 @@ use std::{
 
 type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
+const WORKSPACE_TABS_SOURCE: &str = "herdr-layouts-default-tabs";
+const WORKSPACE_TABS_TOKEN: &str = "herdr-layouts-default-tabs=done";
+
 fn herdr(args: &[&str]) -> Result<Value> {
     let executable = env::var_os("HERDR_BIN_PATH")
         .filter(|s| !s.is_empty())
@@ -55,16 +58,70 @@ fn shell_quote(path: &Path) -> Result<String> {
     Ok(format!("'{}'", text.replace('\'', "'\"'\"'")))
 }
 
+fn event_type(event: &Value) -> Option<&str> {
+    event.get("type").and_then(Value::as_str)
+}
+
+fn plugin_state_dir() -> Result<PathBuf> {
+    Ok(PathBuf::from(
+        env::var_os("HERDR_PLUGIN_STATE_DIR")
+            .filter(|s| !s.is_empty())
+            .ok_or("Missing HERDR_PLUGIN_STATE_DIR")?,
+    ))
+}
+
+fn named_tabs_lock(state: &Path) -> Result<std::fs::File> {
+    fs::create_dir_all(state)?;
+    let lock = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(state.join("named-tabs.lock"))?;
+    lock.lock()?;
+    Ok(lock)
+}
+
 fn label_matches(tab_id: &str, name: &str) -> Result<bool> {
     Ok(herdr(&["tab", "get", tab_id])?["tab"]["label"]
         .as_str()
         .is_some_and(|label| label.eq_ignore_ascii_case(name)))
 }
 
-fn run() -> Result<()> {
-    let event: Value =
-        serde_json::from_str(&env::var("HERDR_PLUGIN_EVENT_JSON").unwrap_or_else(|_| "{}".into()))?;
-    let event = event.get("data").unwrap_or(&event);
+fn bootstrap_workspace_tabs(workspace: &Value) -> Result<()> {
+    if workspace["tokens"]
+        .get("herdr-layouts-default-tabs")
+        .is_some_and(|value| value.as_str().is_some_and(|s| !s.is_empty()))
+    {
+        return Ok(());
+    }
+    if workspace["tab_count"].as_u64().is_some_and(|count| count != 1) {
+        return Ok(());
+    }
+    let workspace_id = string(workspace, "workspace_id")?;
+    let active_tab = string(workspace, "active_tab_id")?;
+    let _lock = named_tabs_lock(&plugin_state_dir()?)?;
+    herdr(&["tab", "rename", active_tab, "code"])?;
+    herdr(&[
+        "tab",
+        "create",
+        "--workspace",
+        workspace_id,
+        "--label",
+        "board",
+        "--no-focus",
+    ])?;
+    herdr(&[
+        "workspace",
+        "report-metadata",
+        workspace_id,
+        "--source",
+        WORKSPACE_TABS_SOURCE,
+        "--token",
+        WORKSPACE_TABS_TOKEN,
+    ])?;
+    Ok(())
+}
+
+fn run_named_tab(event: &Value) -> Result<()> {
     let tab = event.get("tab").unwrap_or(event);
     let name = tab["label"].as_str().unwrap_or("").to_ascii_lowercase();
     if name != "code" && name != "board" {
@@ -79,18 +136,7 @@ fn run() -> Result<()> {
         return Err("Named tab event has no valid tab ID".into());
     }
     let token = format!("herdr-{name}-tab");
-    let state = PathBuf::from(
-        env::var_os("HERDR_PLUGIN_STATE_DIR")
-            .filter(|s| !s.is_empty())
-            .ok_or("Missing HERDR_PLUGIN_STATE_DIR")?,
-    );
-    fs::create_dir_all(&state)?;
-    // ponytail: serialize these rare events; per-tab locks if contention matters.
-    let lock = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(state.join("named-tabs.lock"))?;
-    lock.lock()?;
+    let _lock = named_tabs_lock(&plugin_state_dir()?)?;
     if !label_matches(tab_id, &name)? {
         return Ok(());
     }
@@ -110,7 +156,7 @@ fn run() -> Result<()> {
     }
     let pane_id = string(pane, "pane_id")?;
     let deadline =
-        Instant::now() + Duration::from_secs(if event["type"] == "tab_created" { 8 } else { 0 });
+        Instant::now() + Duration::from_secs(if event_type(event) == Some("tab_created") { 8 } else { 0 });
     loop {
         let response = herdr(&["pane", "process-info", "--pane", pane_id])?;
         let info = &response["process_info"];
@@ -178,6 +224,22 @@ fn run() -> Result<()> {
         &format!("{token}=started"),
     ])?;
     Ok(())
+}
+
+fn run() -> Result<()> {
+    let event: Value =
+        serde_json::from_str(&env::var("HERDR_PLUGIN_EVENT_JSON").unwrap_or_else(|_| "{}".into()))?;
+    let event = event.get("data").unwrap_or(&event);
+    match event_type(event) {
+        Some("workspace_created") => {
+            let workspace = event
+                .get("workspace")
+                .ok_or("Workspace created event has no workspace")?;
+            bootstrap_workspace_tabs(workspace)
+        }
+        Some("tab_created") | Some("tab_renamed") => run_named_tab(event),
+        _ => Ok(()),
+    }
 }
 
 fn main() {

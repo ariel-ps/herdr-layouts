@@ -17,7 +17,7 @@ def check():
     assert manifest['build'] == [{'command': ['sh', './scripts/build/install.sh']}]
     assert manifest['events'] == [
         {'on': event, 'command': ['./libexec/herdr-named-tab']}
-        for event in ('tab.created', 'tab.renamed')]
+        for event in ('workspace.created', 'tab.created', 'tab.renamed')]
     with tempfile.TemporaryDirectory(prefix="named tabs ' ") as temporary:
         root = Path(temporary).resolve()
         binary = root / 'relocated plugin/libexec/herdr-named-tab'
@@ -38,8 +38,13 @@ path = Path(os.environ['TEST_STATE'])
 state = json.loads(path.read_text())
 a = sys.argv[1:]
 state['calls'].append(a)
-case, name = state['case'], state['name']
+case, name = state.get('case'), state.get('name')
 result = {}
+if state.get('mode') == 'workspace':
+    if a[:2] == ['tab', 'rename'] or a[:2] == ['tab', 'create'] or a[:2] == ['workspace', 'report-metadata']:
+        path.write_text(json.dumps(state))
+        sys.exit(0)
+    sys.exit(2)
 if case == 'api-error':
     print(json.dumps({'error': 'API failed'}))
     sys.exit(0)
@@ -134,6 +139,48 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
                     assert not state['calls'], state
                 nvim.chmod(0o755)
             print(f'PASS: Rust {name} hook, startup, concurrency, busy-pane protection and errors')
+
+        ws_state = root / 'ws-state.json'
+        ws_state.write_text(json.dumps({'mode': 'workspace', 'calls': []}))
+        workspace = {
+            'type': 'workspace_created',
+            'workspace': {
+                'workspace_id': 'w1',
+                'active_tab_id': 'w1:t1',
+                'tab_count': 1,
+                'tokens': {},
+            },
+        }
+        env = {**os.environ, 'HERDR_PLUGIN_STATE_DIR': str(root / 'plugin state'),
+               'HERDR_BIN_PATH': str(stub), 'TEST_STATE': str(ws_state),
+               'HERDR_PLUGIN_EVENT_JSON': json.dumps(workspace)}
+        result = subprocess.run([str(binary)], env=env, cwd=root,
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
+        ws = json.loads(ws_state.read_text())
+        assert ws['calls'] == [
+            ['tab', 'rename', 'w1:t1', 'code'],
+            ['tab', 'create', '--workspace', 'w1', '--label', 'board', '--no-focus'],
+            ['workspace', 'report-metadata', 'w1', '--source', 'herdr-layouts-default-tabs',
+             '--token', 'herdr-layouts-default-tabs=done'],
+        ], ws
+        ws_state.write_text(json.dumps({
+            'mode': 'workspace', 'calls': [],
+            'workspace': {'tokens': {'herdr-layouts-default-tabs': 'done'}},
+        }))
+        skip = {
+            'type': 'workspace_created',
+            'workspace': {
+                'workspace_id': 'w1',
+                'active_tab_id': 'w1:t1',
+                'tab_count': 1,
+                'tokens': {'herdr-layouts-default-tabs': 'done'},
+            },
+        }
+        env['HERDR_PLUGIN_EVENT_JSON'] = json.dumps(skip)
+        subprocess.run([str(binary)], env=env, cwd=root, check=True, timeout=15)
+        assert json.loads(ws_state.read_text())['calls'] == []
+        print('PASS: workspace bootstrap creates code and board tabs')
 
 
 if __name__ == '__main__':
