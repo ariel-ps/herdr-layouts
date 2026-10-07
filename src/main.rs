@@ -98,7 +98,7 @@ fn bootstrap_workspace_tabs(workspace: &Value) -> Result<()> {
     }
     let workspace_id = string(workspace, "workspace_id")?;
     let _lock = named_tabs_lock(&plugin_state_dir()?)?;
-    for label in ["code", "board"] {
+    for label in ["code", "board", "lazygit"] {
         herdr(&[
             "tab",
             "create",
@@ -124,7 +124,7 @@ fn bootstrap_workspace_tabs(workspace: &Value) -> Result<()> {
 fn run_named_tab(event: &Value) -> Result<()> {
     let tab = event.get("tab").unwrap_or(event);
     let name = tab["label"].as_str().unwrap_or("").to_ascii_lowercase();
-    if name != "code" && name != "board" {
+    if name != "code" && name != "board" && name != "lazygit" {
         return Ok(());
     }
     let tab_id = string(tab, "tab_id")?;
@@ -189,31 +189,43 @@ fn run_named_tab(event: &Value) -> Result<()> {
     if !label_matches(tab_id, &name)? {
         return Ok(());
     }
-    let command = if name == "code" {
-        let Some(path) = env::split_paths(&env::var_os("PATH").unwrap_or_default())
-            .map(|dir| dir.join("nvim"))
-            .find(|path| executable(path))
-        else {
-            return Ok(());
-        };
-        format!("{} .", shell_quote(&fs::canonicalize(path)?)?)
-    } else {
-        let response = herdr(&["plugin", "list", "--json"])?;
-        let plugin = response["plugins"]
-            .as_array()
-            .and_then(|plugins| {
-                plugins
-                    .iter()
-                    .find(|p| p["plugin_id"] == "herdr-board" && p["enabled"] == true)
-            })
-            .ok_or("Install and enable the herdr-board plugin to open board tabs")?;
-        let path = Path::new(string(plugin, "plugin_root")?).join("target/release/board");
-        if !executable(&path) {
-            return Err(
-                "Herdr Board executable is missing; reinstall the herdr-board plugin".into(),
-            );
+    let command = match name.as_str() {
+        "code" => {
+            let Some(path) = env::split_paths(&env::var_os("PATH").unwrap_or_default())
+                .map(|dir| dir.join("nvim"))
+                .find(|path| executable(path))
+            else {
+                return Ok(());
+            };
+            format!("{} .", shell_quote(&fs::canonicalize(path)?)?)
         }
-        format!("{} tui", shell_quote(&path)?)
+        "lazygit" => {
+            let Some(path) = env::split_paths(&env::var_os("PATH").unwrap_or_default())
+                .map(|dir| dir.join("lazygit"))
+                .find(|path| executable(path))
+            else {
+                return Ok(());
+            };
+            shell_quote(&fs::canonicalize(path)?)?
+        }
+        _ => {
+            let response = herdr(&["plugin", "list", "--json"])?;
+            let plugin = response["plugins"]
+                .as_array()
+                .and_then(|plugins| {
+                    plugins
+                        .iter()
+                        .find(|p| p["plugin_id"] == "herdr-board" && p["enabled"] == true)
+                })
+                .ok_or("Install and enable the herdr-board plugin to open board tabs")?;
+            let path = Path::new(string(plugin, "plugin_root")?).join("target/release/board");
+            if !executable(&path) {
+                return Err(
+                    "Herdr Board executable is missing; reinstall the herdr-board plugin".into(),
+                );
+            }
+            format!("{} tui", shell_quote(&path)?)
+        }
     };
     herdr(&["pane", "run", pane_id, &command])?;
     herdr(&[

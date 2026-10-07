@@ -28,6 +28,9 @@ def check():
         nvim = tools / 'nvim'
         nvim.write_text('#!/bin/sh\nexit 0\n')
         nvim.chmod(0o755)
+        lazygit = tools / 'lazygit'
+        lazygit.write_text('#!/bin/sh\nexit 0\n')
+        lazygit.chmod(0o755)
         board = root / 'board plugin/target/release/board'
         board.parent.mkdir(parents=True)
         shutil.copy2(nvim, board)
@@ -86,12 +89,17 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
     print(json.dumps({'result': result}))
 ''')
         stub.chmod(0o755)
-        for name in ('code', 'board'):
+        for name in ('code', 'board', 'lazygit'):
             cases = ['created', 'renamed', 'other', 'unnamed', 'busy', 'multiple', 'agent',
                      'startup', 'renamed-away', 'renamed-during-startup', 'failed-run',
                      'invalid-id', 'malformed-event', 'unknown-process', 'api-error',
                      'bad-response', 'concurrent']
-            cases += ['missing-nvim'] if name == 'code' else ['missing-plugin', 'disabled-plugin', 'missing-binary']
+            if name == 'code':
+                cases += ['missing-nvim']
+            elif name == 'board':
+                cases += ['missing-plugin', 'disabled-plugin', 'missing-binary']
+            else:
+                cases += ['missing-lazygit']
             for case in cases:
                 state_path = root / 'state.json'
                 state_path.write_text(json.dumps({'case': case, 'name': name, 'tokens': {},
@@ -107,6 +115,8 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
                            event if case == 'created' else {'data': event})}
                 if case == 'missing-nvim':
                     nvim.chmod(0o644)
+                if case == 'missing-lazygit':
+                    lazygit.chmod(0o644)
                 if case == 'missing-binary':
                     board.unlink()
                 failures = ('failed-run', 'missing-plugin', 'disabled-plugin', 'missing-binary',
@@ -130,7 +140,12 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
                 expected_launches = 2 if case == 'failed-run' else int(launched)
                 assert len(launches) == expected_launches, (name, case, state)
                 if launched:
-                    expected = f'{shlex.quote(str(nvim))} .' if name == 'code' else f'{shlex.quote(str(board))} tui'
+                    if name == 'code':
+                        expected = f'{shlex.quote(str(nvim))} .'
+                    elif name == 'board':
+                        expected = f'{shlex.quote(str(board))} tui'
+                    else:
+                        expected = shlex.quote(str(lazygit))
                     assert launches[0][3] == expected, launches
                     assert state['tokens'] == {f'herdr-{name}-tab': 'started'}
                 else:
@@ -138,6 +153,7 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
                 if case in ('other', 'unnamed', 'invalid-id', 'malformed-event'):
                     assert not state['calls'], state
                 nvim.chmod(0o755)
+                lazygit.chmod(0o755)
             print(f'PASS: Rust {name} hook, startup, concurrency, busy-pane protection and errors')
 
         ws_state = root / 'ws-state.json'
@@ -161,6 +177,7 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
         assert ws['calls'] == [
             ['tab', 'create', '--workspace', 'w1', '--label', 'code', '--no-focus'],
             ['tab', 'create', '--workspace', 'w1', '--label', 'board', '--no-focus'],
+            ['tab', 'create', '--workspace', 'w1', '--label', 'lazygit', '--no-focus'],
             ['workspace', 'report-metadata', 'w1', '--source', 'herdr-layouts-default-tabs',
              '--token', 'herdr-layouts-default-tabs=done'],
         ], ws
@@ -180,7 +197,7 @@ if a[:2] not in [['pane', 'run'], ['pane', 'report-metadata']]:
         env['HERDR_PLUGIN_EVENT_JSON'] = json.dumps(skip)
         subprocess.run([str(binary)], env=env, cwd=root, check=True, timeout=15)
         assert json.loads(ws_state.read_text())['calls'] == []
-        print('PASS: workspace bootstrap creates code and board tabs')
+        print('PASS: workspace bootstrap creates code, board, and lazygit tabs')
 
 
 if __name__ == '__main__':

@@ -18,13 +18,13 @@ Use a commit or release tag instead of `main` to pin a version. Supports macOS, 
 
 Herdr Setup loads the enabled plugin's helpers in bash or zsh. For a manual installation, source the installed plugin's `shell.bash` in `.bashrc` or `shell.zsh` in `.zshrc`. These root files are stable public loaders for the private `libexec/layouts.zsh` implementation. Bash helpers call that same zsh implementation, so zsh must also be installed; you keep bash as your shell.
 
-## Code and Board tabs
+## Code, Board, and Lazygit tabs
 
-Every new workspace keeps its default first tab (typically labelled `1`) and adds two more tabs labelled `code` and `board` without stealing focus. The same hooks then open Neovim and Herdr Board when each named tab's shell is idle.
+Every new workspace keeps its default first tab (typically labelled `1`) and adds three more tabs labelled `code`, `board`, and `lazygit` without stealing focus. The same hooks then open Neovim, Herdr Board, and Lazygit when each named tab's shell is idle.
 
-You can still create or rename any other idle, single-pane tab to `code` or `board` (case-insensitive) to trigger the same launchers manually.
+You can still create or rename any other idle, single-pane tab to `code`, `board`, or `lazygit` (case-insensitive) to trigger the same launchers manually.
 
-If Neovim is not on PATH, `code` tabs stay a normal shell; install `nvim` to auto-launch the editor. The `herdr-board` plugin must be installed and enabled for `board` tabs; the hook finds its executable automatically.
+If Neovim is not on PATH, `code` tabs stay a normal shell; install `nvim` to auto-launch the editor. The `herdr-board` plugin must be installed and enabled for `board` tabs; the hook finds its executable automatically. If `lazygit` is not on PATH, `lazygit` tabs stay a normal shell; install `lazygit` to auto-launch it.
 
 Each app starts at most once per pane. It leaves other tab names, tabs with multiple panes, and panes already running an agent or another program alone. The launcher is a compiled Rust binary; Python is not needed at runtime. No Herdr restart is needed after enabling the plugin.
 
