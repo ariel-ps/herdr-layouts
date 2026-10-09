@@ -5,6 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -15,7 +16,7 @@ def check_runtime(plugin, home):
     state = home / 'state.json'
     calls = home / 'calls.jsonl'
     rpc = home / 'rpc.json'
-    executable = tools / 'herdr'
+    executable = tools / 'custom-herdr'
     executable.write_text('''#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
@@ -48,7 +49,17 @@ print(json.dumps({'result': result}))
     executable.chmod(0o755)
     env = {**os.environ, 'HOME': str(home), 'XDG_CONFIG_HOME': str(home / 'config'),
            'PATH': str(tools) + ':' + os.environ['PATH'], 'TEST_STATE': str(state),
-           'TEST_CALLS': str(calls), 'TEST_RPC': str(rpc), 'HERDR_AGENT_ARGS': ''}
+           'TEST_CALLS': str(calls), 'TEST_RPC': str(rpc), 'HERDR_AGENT_ARGS': '',
+           'HERDR_BIN_PATH': str(executable)}
+    env.pop('HERDR_PLUGIN_ROOT', None)
+
+    custom_socket = home / 'custom-herdr.sock'
+    socket_check = subprocess.run(
+        ['zsh', '-fc', 'source "$1/shell.zsh"; __herdr_rpc "{}"', 'check', str(plugin)],
+        env={**env, 'HERDR_SOCKET_PATH': str(custom_socket)},
+        text=True, capture_output=True,
+    )
+    assert socket_check.returncode == 1 and str(custom_socket) in socket_check.stderr
 
     def invoke(*args):
         return subprocess.run(['zsh', '-fc', '''source "$1/shell.zsh"; shift
@@ -138,17 +149,66 @@ def check():
         home = Path(temporary)
         plugin = home / 'plugin copy'
         shutil.copytree(ROOT, plugin, ignore=shutil.ignore_patterns('.git', '__pycache__'))
+        env = {**os.environ, 'HOME': str(home), 'XDG_CONFIG_HOME': str(home / 'config'),
+               'XDG_CACHE_HOME': str(home / 'cache')}
+        env.pop('HERDR_PLUGIN_ROOT', None)
+
+        manifest = tomllib.loads((plugin / 'herdr-plugin.toml').read_text())
+        assert manifest['id'] == 'dev.ariel.herdr-layouts'
+        assert manifest['actions'][:1] == [{
+            'id': 'list',
+            'title': 'List saved layouts',
+            'command': ['zsh', './actions/list-layouts.zsh'],
+        }]
         result = subprocess.run(
-            ['zsh', '-fc', 'plugin=$1; source "$plugin/shell.zsh"; herdr-layout-list', 'check', str(plugin)],
-            env={**os.environ, 'HOME': str(home), 'XDG_CONFIG_HOME': str(home / 'config'),
-                 'XDG_CACHE_HOME': str(home / 'cache')}, text=True, capture_output=True)
+            manifest['actions'][0]['command'], cwd=plugin, env=env, text=True, capture_output=True)
         assert result.returncode == 0, result.stderr
         assert 'no saved layouts' in result.stdout
+
+        result = subprocess.run(
+            ['zsh', '-fc', 'plugin=$1; source "$plugin/shell.zsh"; herdr-layout-list', 'check', str(plugin)],
+            env=env, text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert 'no saved layouts' in result.stdout
+
+        detached_loader = home / 'detached loader.zsh'
+        shutil.copy2(plugin / 'shell.zsh', detached_loader)
+        result = subprocess.run(
+            ['zsh', '-fc', 'source "$1"; herdr-layout-list', 'check', str(detached_loader)],
+            env={**env, 'HERDR_PLUGIN_ROOT': str(plugin)}, text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert 'no saved layouts' in result.stdout
+
+        detached_action = home / 'detached action.zsh'
+        shutil.copy2(plugin / 'actions/list-layouts.zsh', detached_action)
+        result = subprocess.run(
+            ['zsh', str(detached_action)], env={**env, 'HERDR_PLUGIN_ROOT': str(plugin)},
+            text=True, capture_output=True)
+        assert result.returncode == 0, result.stderr
+        assert 'no saved layouts' in result.stdout
+
+        detached_bash_loader = home / 'detached loader.bash'
+        shutil.copy2(plugin / 'shell.bash', detached_bash_loader)
+        result = subprocess.run(
+            ['bash', '--noprofile', '--norc', '-c',
+             'source "$1"; herdr-layout-list', 'check', str(detached_bash_loader)],
+            cwd=home,
+            env={
+                **env,
+                'CDPATH': str(home),
+                'HERDR_PLUGIN_ROOT': plugin.name,
+            },
+            text=True,
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert 'no saved layouts' in result.stdout
+
         check_runtime(plugin, home)
 
         # Verify bash forwards literal arguments, cwd, and failures to the implementation.
         commands = ["herdr-layout-save","herdr-layout-load","herdr-layout-up","herdr-layout-list","herdr-grid-agents"]
-        (plugin / 'shell.zsh').write_text('\n'.join(
+        (plugin / 'libexec/layouts.zsh').write_text('\n'.join(
             name + '() { printf "%s\\n" "$PWD" "${HERDR_AGENT_ARGS:-}" "$@"; return 7; }'
             for name in commands))
         arguments = ['two words', '$(touch unexpected)', '', '--option']
@@ -157,7 +217,7 @@ def check():
                 ['bash', '--noprofile', '--norc', '-c',
                  'source "$1/shell.bash"; shift; HERDR_AGENT_ARGS="two flags"; "$@"',
                  'check', str(plugin), command, *arguments], cwd=home,
-                env={**os.environ, 'HOME': str(home)}, text=True, capture_output=True)
+                env=env, text=True, capture_output=True)
             assert result.returncode == 7, result.stderr
             assert result.stdout.splitlines() == [str(home.resolve()), 'two flags', *arguments], result.stdout
         assert not (home / 'unexpected').exists()
